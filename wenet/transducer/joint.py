@@ -69,11 +69,11 @@ class TransducerJoint(torch.nn.Module):
             pred_out = self.pred_ffn(pred_out)
 
         if self.ILMT:
-            ILM_out = F.linear(pred_out, self.ffn_out.weight[:, self.blank:], 
-                                self.ffn_out.bias[self.blank:])
+            ILM_out = F.linear(pred_out, self.ffn_out.weight[self.blank+1:], 
+                                self.ffn_out.bias[self.blank+1:])
         if self.ILMA:
-            ILM_ori = F.linear(pred_out, self.ffn_out_ori.weight[:, self.blank:], 
-                                self.ffn_out_ori.bias[self.blank:])
+            ILM_ori = F.linear(pred_out, self.ffn_out_ori.weight[self.blank+1:], 
+                                self.ffn_out_ori.bias[self.blank+1:])
         if not self.ILMA: 
             enc_out = enc_out.unsqueeze(2)  # [B,T,V] -> [B,T,1,V]
             pred_out = pred_out.unsqueeze(1)  # [B,U,V] -> [B,1 U, V]

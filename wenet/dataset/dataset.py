@@ -137,51 +137,56 @@ def Dataset(data_type,
     assert data_type in ['raw', 'shard']
     lists = read_lists(data_list_file)
     shuffle = conf.get('shuffle', True)
+    ILMA = conf.get('shuffle', False)
     dataset = DataList(lists, shuffle=shuffle, partition=partition)
-    if data_type == 'shard':
+    if data_type == 'shard' and not ILMA:
         dataset = Processor(dataset, processor.url_opener)
         dataset = Processor(dataset, processor.tar_file_and_group)
-    else:
+    elif not ILMA:
         dataset = Processor(dataset, processor.parse_raw)
+    else:
+        dataset = Processor(dataset, processor.parse_text)
 
     dataset = Processor(dataset, processor.tokenize, symbol_table, bpe_model,
                         non_lang_syms, conf.get('split_with_space', False))
     filter_conf = conf.get('filter_conf', {})
     dataset = Processor(dataset, processor.filter, **filter_conf)
 
-    resample_conf = conf.get('resample_conf', {})
-    dataset = Processor(dataset, processor.resample, **resample_conf)
+    if not ILMA:
+        resample_conf = conf.get('resample_conf', {})
+        dataset = Processor(dataset, processor.resample, **resample_conf)
 
-    speed_perturb = conf.get('speed_perturb', False)
-    if speed_perturb:
-        dataset = Processor(dataset, processor.speed_perturb)
+        speed_perturb = conf.get('speed_perturb', False)
+        if speed_perturb:
+            dataset = Processor(dataset, processor.speed_perturb)
 
-    feats_type = conf.get('feats_type', 'fbank')
-    assert feats_type in ['fbank', 'mfcc']
-    if feats_type == 'fbank':
-        fbank_conf = conf.get('fbank_conf', {})
-        dataset = Processor(dataset, processor.compute_fbank, **fbank_conf)
-    elif feats_type == 'mfcc':
-        mfcc_conf = conf.get('mfcc_conf', {})
-        dataset = Processor(dataset, processor.compute_mfcc, **mfcc_conf)
+        feats_type = conf.get('feats_type', 'fbank')
+        assert feats_type in ['fbank', 'mfcc']
+        if feats_type == 'fbank':
+            fbank_conf = conf.get('fbank_conf', {})
+            dataset = Processor(dataset, processor.compute_fbank, **fbank_conf)
+        elif feats_type == 'mfcc':
+            mfcc_conf = conf.get('mfcc_conf', {})
+            dataset = Processor(dataset, processor.compute_mfcc, **mfcc_conf)
 
-    spec_aug = conf.get('spec_aug', True)
-    spec_sub = conf.get('spec_sub', False)
-    if spec_aug:
-        spec_aug_conf = conf.get('spec_aug_conf', {})
-        dataset = Processor(dataset, processor.spec_aug, **spec_aug_conf)
-    if spec_sub:
-        spec_sub_conf = conf.get('spec_sub_conf', {})
-        dataset = Processor(dataset, processor.spec_sub, **spec_sub_conf)
+        spec_aug = conf.get('spec_aug', True)
+        spec_sub = conf.get('spec_sub', False)
+        if spec_aug:
+            spec_aug_conf = conf.get('spec_aug_conf', {})
+            dataset = Processor(dataset, processor.spec_aug, **spec_aug_conf)
+        if spec_sub:
+            spec_sub_conf = conf.get('spec_sub_conf', {})
+            dataset = Processor(dataset, processor.spec_sub, **spec_sub_conf)
 
     if shuffle:
         shuffle_conf = conf.get('shuffle_conf', {})
         dataset = Processor(dataset, processor.shuffle, **shuffle_conf)
 
-    sort = conf.get('sort', True)
-    if sort:
-        sort_conf = conf.get('sort_conf', {})
-        dataset = Processor(dataset, processor.sort, **sort_conf)
+    if not ILMA:
+        sort = conf.get('sort', True)
+        if sort:
+            sort_conf = conf.get('sort_conf', {})
+            dataset = Processor(dataset, processor.sort, **sort_conf)
 
     batch_conf = conf.get('batch_conf', {})
     dataset = Processor(dataset, processor.batch, **batch_conf)

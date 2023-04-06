@@ -149,6 +149,31 @@ def parse_raw(data):
         except Exception as ex:
             logging.warning('Failed to read {}'.format(wav_file))
 
+def parse_text(data):
+    """ Parse key/wav/txt from json line
+
+        Args:
+            data: Iterable[str], str is a json line has key/wav/txt
+
+        Returns:
+            Iterable[{key, wav, txt, sample_rate}]
+    """
+    for sample in data:
+        assert 'src' in sample
+        json_line = sample['src']
+        obj = json.loads(json_line)
+        assert 'key' in obj
+        assert 'txt' in obj
+        key = obj['key']
+        txt = obj['txt']
+        waveform = torch.zeros([1, 1])
+        feat = torch.zeros(1)
+        example = dict(key=key,
+                        txt=txt,
+                        wav=waveform,
+                        feat=feat,
+                        sample_rate=16000)
+        yield example
 
 def filter(data,
            max_length=10240,

@@ -15,7 +15,7 @@
 import torch
 from wenet.transducer.joint import TransducerJoint
 from wenet.transducer.predictor import (ConvPredictor, EmbeddingPredictor,
-                                        RNNPredictor)
+                                        RNNPredictor, RNNPredictor_sumEmb)
 from wenet.transducer.transducer import Transducer
 from wenet.transformer.asr_model import ASRModel
 from wenet.transformer.cmvn import GlobalCMVN
@@ -65,6 +65,8 @@ def init_model(configs):
         predictor_type = configs.get('predictor', 'rnn')
         if predictor_type == 'rnn':
             predictor = RNNPredictor(vocab_size, **configs['predictor_conf'])
+        elif predictor_type == 'rnn_sum_emb':
+            predictor = RNNPredictor_sumEmb(vocab_size, **configs['predictor_conf'])
         elif predictor_type == 'embedding':
             predictor = EmbeddingPredictor(vocab_size,
                                            **configs['predictor_conf'])

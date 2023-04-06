@@ -1,11 +1,12 @@
 from typing import Dict, List, Optional, Tuple, Union
+import copy
 
 import torch
 import torchaudio
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from typeguard import check_argument_types
-from wenet.transducer.predictor import PredictorBase
+from wenet.transducer.predictor import (PredictorBase, RNNPredictor_sumEmb)
 from wenet.transducer.search.greedy_search import basic_greedy_search
 from wenet.transducer.search.prefix_beam_search import PrefixBeamSearch
 from wenet.transformer.asr_model import ASRModel
@@ -52,6 +53,7 @@ class Transducer(ASRModel):
         self.ILMT = ILMT
         self.ILMA = ILMA
         self.kld_weight = kld_weight
+        self.vocab_size = vocab_size
 
         self.predictor = predictor
         self.joint = joint
@@ -68,6 +70,11 @@ class Transducer(ASRModel):
             self.ILM_loss = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_ID)
         if self.ILMA:
             self.KLD_loss = nn.KLDivLoss(reduction="none")
+            if isinstance(self.predictor, RNNPredictor_sumEmb):
+                self.predictor_ori = copy.deepcopy(predictor)
+                self.predictor_ori.requires_grad = False
+            else:
+                self.predictor_ori = None
 
     def forward(
         self,
@@ -99,22 +106,31 @@ class Transducer(ASRModel):
         # predictor
         ys_in_pad = add_blank(text, self.blank, self.ignore_id)
         predictor_out = self.predictor(ys_in_pad)
-        # joint
-        joint_out = self.joint(encoder_out, predictor_out)
-        if isinstance(joint_out, Tuple):
-            joint_out, ILM_out = joint_out
-            if isinstance(ILM_out, Tuple):
-                ILM_out, ILM_ori = ILM_out
-                ILM_ori = ILM_ori[:, :-1, :]
+        if isinstance(predictor_out, Tuple):
+            predictor_out, ILM_out = predictor_out
             ILM_out = ILM_out[:, :-1, :]
+        else:
+            ILM_out = None
+        if self.ILMA and self.predictor_ori is not None:
+            _, ILM_ori = self.predictor_ori(ys_in_pad)
+            ILM_ori = ILM_ori[:, :-1, :]
+        # joint
+        if not self.ILMA or ILM_out is None:
+            joint_out = self.joint(encoder_out, predictor_out)
+            if isinstance(joint_out, Tuple):
+                joint_out, ILM_out = joint_out
+                if isinstance(ILM_out, Tuple):
+                    ILM_out, ILM_ori = ILM_out
+                    ILM_ori = ILM_ori[:, :-1, :]
+                ILM_out = ILM_out[:, :-1, :]
         if self.ILMT:
             tokens = text.view(-1) - 1
             tokens[tokens < -1] = -1
             loss_ilm = self.ILM_loss(ILM_out.reshape(-1, ILM_out.size(-1)), tokens)
         if self.ILMA:
             ignore = make_non_pad_mask(text_lengths).view(-1)
-            loss_kld = self.KLD_loss(nn.functional.log_softmax(ILM_out.view(-1, vocab_size-1)), 
-                                        nn.functional.softmax(ILM_ori.view(-1, vocab_size-1)))
+            loss_kld = self.KLD_loss(nn.functional.log_softmax(ILM_out.reshape(-1, self.vocab_size-1)), 
+                                        nn.functional.softmax(ILM_ori.reshape(-1, self.vocab_size-1)))
             loss_kld = loss_kld.masked_fill(~ignore.unsqueeze(1), 0).sum() / ignore.sum()
         # NOTE(Mddct): some loss implementation require pad valid is zero
         # torch.int32 rnnt_loss required
@@ -150,12 +166,12 @@ class Transducer(ASRModel):
             loss = loss + self.ctc_weight * loss_ctc.sum()
         if loss_att is not None:
             loss = loss + self.attention_decoder_weight * loss_att.sum()
-        if self.ILMT:
+        if self.ILMT and not self.ILMA:
             loss = loss + loss_ilm
         if self.ILMA:
             loss = (1 - self.kld_weight) * loss_ilm + self.kld_weight * loss_kld
         # NOTE: 'loss' must be in dict
-        if self.ILMT:
+        if self.ILMT and not self.ILMA:
             return {
                 'loss': loss,
                 'loss_att': loss_att,

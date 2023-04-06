@@ -230,7 +230,7 @@ def main():
         # cuda model is required for nn.parallel.DistributedDataParallel
         model.cuda()
         model = torch.nn.parallel.DistributedDataParallel(
-            model, find_unused_parameters=False)
+            model, find_unused_parameters=True)
         device = torch.device("cuda")
         if args.fp16_grad_sync:
             from torch.distributed.algorithms.ddp_comm_hooks import (
